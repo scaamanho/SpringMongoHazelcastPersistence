@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:mongo="http://www.springframework.org/schema/data/mongo"
+       xmlns:hz="http://www.hazelcast.com/schema/spring"
+       xsi:schemaLocation="
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.0.xsd
+		http://www.springframework.org/schema/data/mongo http://www.springframework.org/schema/data/mongo/spring-mongo-1.0.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+		http://www.hazelcast.com/schema/spring http://www.hazelcast.com/schema/spring/hazelcast-spring-3.2.xsd"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+  <mongo:mongo id="mongo" 		host="localhost" port="27017" />
+
+  <bean id="mongoFactoryBean" class="org.springframework.data.mongodb.core.MongoFactoryBean">
+    <property name="host" value="localhost" />
+    <property name="port" value="27017"/>
+  </bean>
+
+  <bean id="mongoDbFactory" class="org.springframework.data.mongodb.core.SimpleMongoDbFactory">
+    <constructor-arg name="mongo" ref="mongoFactoryBean" />
+    <constructor-arg name="databaseName" value="inplan" />
+  </bean>
+
+  <bean id="mongoTemplate" class="org.springframework.data.mongodb.core.MongoTemplate">
+    <constructor-arg name="mongoDbFactory" ref="mongoDbFactory" />
+  </bean>
+
+  <!-- Necesario definir un MongoMapstore por cada uno de los objetos persistentes
+    en BBDD -->
+  <bean class="com.hazelcast.spring.mongodb.MongoMapStore" id="atvMongoMapstore">
+    <property name="mongoTemplate" ref="mongoTemplate" />
+  </bean>
+
+  <hz:hazelcast id="instance">
+    <hz:config>
+      <hz:group name="INplanCache" password="INplanCachePwd" />
+      <hz:properties>
+        <hz:property name="hazelcast.executor.client.thread.count">200</hz:property>
+        <hz:property name="hazelcast.merge.first.run.delay.seconds">5</hz:property>
+        <hz:property name="hazelcast.merge.next.run.delay.seconds">5</hz:property>
+      </hz:properties>
+
+      <hz:network port="5701" port-auto-increment="false">
+        <hz:join>
+          <hz:multicast enabled="false"
+                        multicast-group="224.2.2.3"
+                        multicast-port="54327" />
+        </hz:join>
+      </hz:network>
+
+      <!-- Ejemplo de definicion de mapa -->
+      <!-- <hz:map name="map" backup-count="${hz.map.backup.count}" max-size="${hz.map.max.size}"
+        eviction-percentage="${hz.map.eviction.percentage}" read-backup-data="${hz.map.read.backup.data}"
+        cache-value="${hz.map.cache.value}" eviction-policy="${hz.map.eviction.policy}"
+        merge-policy="${hz.map.merge.policy}" time-to-live-seconds="${hz.map.time.to.live}"/> -->
+      <!-- <hz:map name="testMap"
+                   backup-count="2"
+                   max-size="0"
+                   eviction-percentage="30"
+                   read-backup-data="true"
+                   eviction-policy="NONE"
+                   merge-policy="PUT_IF_ABSENT"
+                   in-memory-format="BINARY">
+               <hz:map-store enabled="true" class-name="com.hazelcast.spring.DummyStore" write-delay-seconds="0" initial-mode="EAGER"/>
+               <hz:near-cache time-to-live-seconds="0" max-idle-seconds="60" eviction-policy="LRU" max-size="5000"
+                              invalidate-on-change="true"/>
+               <hz:indexes>
+                   <hz:index attribute="name"/>
+                   <hz:index attribute="age" ordered="true"/>
+               </hz:indexes>
+      </hz:map -->
+
+      <hz:map name="inplan.cache.atv">
+        <hz:map-store enabled="true"
+                      implementation="atvMongoMapstore"
+                      write-delay-seconds="0">
+        </hz:map-store>
+        <hz:indexes>
+          <hz:index attribute="id" ordered="true"/>
+          <hz:index attribute="arrFlightNumber" />
+          <hz:index attribute="depFlightNumber" />
+        </hz:indexes>
+      </hz:map>
+    </hz:config>
+  </hz:hazelcast>
+</beans>
